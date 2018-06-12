@@ -135,30 +135,37 @@ public class SettlementUtils {
 
     public Map getYearInfo(Integer year){
         HashMap map = new HashMap<>();
-        if (year == 2018){
-            map.put("date",SettlementConstants.START_DATE_2018);
-            map.put("begin",SettlementConstants.BEGIN_2018);
-            map.put("alladf",SettlementConstants.ALLADF_2018);
-        }else if (year == 2019){
-            map.put("date",SettlementConstants.START_DATE_2019);
-            map.put("begin",SettlementConstants.BEGIN_2019);
-            map.put("alladf",SettlementConstants.ALLADF_2019);
-        }else if (year == 2020){
-            map.put("date",SettlementConstants.START_DATE_2020);
-            map.put("begin",SettlementConstants.BEGIN_2020);
-            map.put("alladf",SettlementConstants.ALLADF_2020);
-        }else if (year == 2021){
-            map.put("date",SettlementConstants.START_DATE_2021);
-            map.put("begin",SettlementConstants.BEGIN_2021);
-            map.put("alladf",SettlementConstants.ALLADF_2021);
-        }else if (year == 2022){
-            map.put("date",SettlementConstants.START_DATE_2022);
-            map.put("begin",SettlementConstants.BEGIN_2022);
-            map.put("alladf",SettlementConstants.ALLADF_2022);
-        }else if (year == 2023){
-            map.put("date",SettlementConstants.START_DATE_2023);
-            map.put("begin",SettlementConstants.BEGIN_2023);
-            map.put("alladf",SettlementConstants.ALLADF_2023);
+        switch (year){
+            case 2018:
+                map.put("date",SettlementConstants.START_DATE_2018);
+                map.put("begin",SettlementConstants.BEGIN_2018);
+                map.put("alladf",SettlementConstants.ALLADF_2018);
+                break;
+            case 2019:
+                map.put("date",SettlementConstants.START_DATE_2019);
+                map.put("begin",SettlementConstants.BEGIN_2019);
+                map.put("alladf",SettlementConstants.ALLADF_2019);
+                break;
+            case 2020:
+                map.put("date",SettlementConstants.START_DATE_2020);
+                map.put("begin",SettlementConstants.BEGIN_2020);
+                map.put("alladf",SettlementConstants.ALLADF_2020);
+                break;
+            case 2021:
+                map.put("date",SettlementConstants.START_DATE_2021);
+                map.put("begin",SettlementConstants.BEGIN_2021);
+                map.put("alladf",SettlementConstants.ALLADF_2021);
+                break;
+            case 2022:
+                map.put("date",SettlementConstants.START_DATE_2022);
+                map.put("begin",SettlementConstants.BEGIN_2022);
+                map.put("alladf",SettlementConstants.ALLADF_2022);
+                break;
+            case 2023:
+                map.put("date",SettlementConstants.START_DATE_2023);
+                map.put("begin",SettlementConstants.BEGIN_2023);
+                map.put("alladf",SettlementConstants.ALLADF_2023);
+                break;
         }
         return map;
     }
@@ -301,29 +308,35 @@ public class SettlementUtils {
      */
     public double getStylefactor(String adType) {
         double b = 0.0;
-        if (AdTypeConstants.AD_TYPE_001.equals(adType)) {
-            b = 0.30;
-        }
-        if (AdTypeConstants.AD_TYPE_002.equals(adType)) {
-            b =  0.28;
-        }
-        if (AdTypeConstants.AD_TYPE_003.equals(adType)) {
-            b =  0.32;
-        }
-        if (AdTypeConstants.AD_TYPE_004.equals(adType)) {
-            b =  0.30;
-        }
-        if (AdTypeConstants.AD_TYPE_005.equals(adType)) {
-            b =  0.35;
-        }
-        if (AdTypeConstants.AD_TYPE_006.equals(adType)) {
-            b =  0.33;
-        }
-        if (AdTypeConstants.AD_TYPE_007.equals(adType)) {
-            b =  0.35;
-        }
-        if (AdTypeConstants.AD_TYPE_008.equals(adType)) {
-            b =  0.33;
+
+        switch (adType){
+            case AdTypeConstants.AD_TYPE_001:
+                b = 0.30;
+                break;
+            case AdTypeConstants.AD_TYPE_002:
+                b = 0.28;
+                break;
+            case AdTypeConstants.AD_TYPE_003:
+                b =  0.32;
+                break;
+            case AdTypeConstants.AD_TYPE_004:
+                b =  0.30;
+                break;
+            case AdTypeConstants.AD_TYPE_005:
+                b =  0.35;
+                break;
+            case AdTypeConstants.AD_TYPE_006:
+                b =  0.33;
+                break;
+            case AdTypeConstants.AD_TYPE_007:
+                b =  0.35;
+                break;
+            case AdTypeConstants.AD_TYPE_008:
+                b =  0.33;
+                break;
+            default:
+                b = 0.0;
+                break;
         }
         return b;
     }

@@ -1,26 +1,22 @@
 package com.adfunds.web.scheduled;
 
-import com.adfunds.core.constants.SettlementConstants;
 import com.adfunds.core.utils.DateTimeUtils;
 import com.adfunds.core.utils.settlement.SettlementUtils;
-import com.adfunds.web.model.Abnormal;
-import com.adfunds.web.model.Settlement;
-import com.adfunds.web.pojo.Ad;
+import com.adfunds.web.pojo.dto.Abnormal;
+import com.adfunds.web.pojo.dto.Settlement;
+import com.adfunds.web.pojo.dto.Ad;
 import com.adfunds.web.service.elastic.IAdService;
-import com.adfunds.web.service.fabric.IFabricService;
+import com.adfunds.web.service.fabric.IStateService;
 import com.adfunds.web.service.mysql.IAbnormalService;
 import com.adfunds.web.service.mysql.ISettlementService;
-import com.google.gson.Gson;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
-import org.elasticsearch.search.aggregations.bucket.filters.Filters;
-import org.elasticsearch.search.aggregations.bucket.filters.FiltersAggregator;
 import org.elasticsearch.search.aggregations.bucket.terms.StringTerms;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
@@ -47,9 +43,8 @@ public class SettlementCenter {
     @Autowired
     private ElasticsearchTemplate elasticsearchTemplate;
     private Log logger = LogFactory.getLog(this.getClass());
-
     @Autowired
-    private IFabricService fabricService;
+    private IStateService stateService;
 
     @Autowired
     private SettlementUtils settlementUtils;
@@ -76,88 +71,68 @@ public class SettlementCenter {
         try {
             Client client = elasticsearchTemplate.getClient();
             DecimalFormat df = new DecimalFormat("#0.00000000");
-
             Date yesterday = dateTimeUtils.getDate(-1);
-
             String sendDate = dateTimeUtils.getFormatDate(yesterday, "yyyyMMdd");
-
             SearchRequestBuilder searchRequestBuilder = client.prepareSearch("adcoin").setTypes("ad");
-            AggregationBuilder aggregation =
-                    AggregationBuilders
-                            .filters("sendDateAgg",
-                                    new FiltersAggregator.KeyedFilter("sendDate", QueryBuilders.termQuery("sendDate", sendDate)));
+            BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery()
+                    .must(QueryBuilders.termQuery("sendDate.keyword", sendDate));
             TermsAggregationBuilder flowMainAgg = AggregationBuilders.terms("flowMainAgg").field("flowMain.keyword");
-
-
             TermsAggregationBuilder adTypeAgg = AggregationBuilders.terms("adTypeAgg").field("adType.keyword");
             flowMainAgg.subAggregation(adTypeAgg);
 
-            aggregation.subAggregation(flowMainAgg);
-
-            searchRequestBuilder.addAggregation(aggregation);
-
-
-            SearchResponse searchResponse = searchRequestBuilder.execute().actionGet();
-            Filters sendDateTerms = searchResponse.getAggregations().get("sendDateAgg");
+            SearchResponse searchResponse = searchRequestBuilder
+                    .setQuery(queryBuilder)
+                    .addAggregation(flowMainAgg)
+                    .execute().actionGet();
             //取到当天的发币数量
             double nowcoin = settlementUtils.getCoin();
-            Iterator<? extends Filters.Bucket> sendDateIt = sendDateTerms.getBuckets().iterator();
+            //流量主贡献记录
+            List<Map> ls = new ArrayList<>();
+            //总贡献记录
+            double alls = 0.0;
+            Terms flowMainTerms = searchResponse.getAggregations().get("flowMainAgg");
+            Iterator<? extends Terms.Bucket> flowMainBucketIt = flowMainTerms.getBuckets().iterator();
+            while (flowMainBucketIt.hasNext()) {
+                Terms.Bucket flowMainBucket = flowMainBucketIt.next();
 
-            while (sendDateIt.hasNext()) {
-                Filters.Bucket sendDateBucket = sendDateIt.next();
-                logger.info("日期：" + sendDate + " 有 " + sendDateBucket.getDocCount() + "个贡献。");
-                StringTerms flowMainTerms = (StringTerms) sendDateBucket.getAggregations().asMap().get("flowMainAgg");
+                if (null != flowMainBucket.getKey() && !"".equals(flowMainBucket.getKey().toString())) {
+                    logger.info("流量主 " + flowMainBucket.getKey() + " 有" + flowMainBucket.getDocCount() + "个贡献。");
+                    Ad ad = adService.getAddressByFlowMainAndSendDate(flowMainBucket.getKey().toString(), sendDate);
 
-                Iterator<StringTerms.Bucket> flowMainBucketIt = flowMainTerms.getBuckets().iterator();
+                    StringTerms adTypeTerms = (StringTerms) flowMainBucket.getAggregations().asMap().get("adTypeAgg");
+                    Iterator<StringTerms.Bucket> adTypeBucketIt = adTypeTerms.getBuckets().iterator();
+                    double zh = 0.0;
 
-                //流量主贡献记录
-                List<Map> ls = new ArrayList<>();
-                //总贡献记录
-                double alls = 0.0;
+                    while (adTypeBucketIt.hasNext()) {
+                        Terms.Bucket adTyperBucket = adTypeBucketIt.next();
+                        logger.info("样式 " + adTyperBucket.getKey() + " 有" + adTyperBucket.getDocCount() + "个贡献。");
 
-                while (flowMainBucketIt.hasNext()) {
-                    Terms.Bucket flowMainBucket = flowMainBucketIt.next();
+                        double count = (double) adTyperBucket.getDocCount();
+                        //计算样式系数
+                        double styleFactor = settlementUtils.getStylefactor(adTyperBucket.getKey().toString());
+                        double completeness = settlementUtils.getCompleteness(sendDate, flowMainBucket.getKeyAsString(), adTyperBucket.getKeyAsString());
 
+                        System.out.println("样式系数：" + styleFactor);
+                        System.out.println("完备程度：" + completeness);
 
-                    if (!(null == flowMainBucket.getKey()) && !"".equals(flowMainBucket.getKey().toString())) {
-                        logger.info("流量主 " + flowMainBucket.getKey() + " 有" + flowMainBucket.getDocCount() + "个贡献。");
-                        Ad ad = adService.getAddressByFlowMainAndSendDate(flowMainBucket.getKey().toString(), sendDate);
-
-                        StringTerms adTypeTerms = (StringTerms) flowMainBucket.getAggregations().asMap().get("adTypeAgg");
-                        Iterator<StringTerms.Bucket> adTypeBucketIt = adTypeTerms.getBuckets().iterator();
-                        double zh = 0.0;
-
-                        while (adTypeBucketIt.hasNext()) {
-                            Terms.Bucket adTyperBucket = adTypeBucketIt.next();
-                            logger.info("样式 " + adTyperBucket.getKey() + " 有" + adTyperBucket.getDocCount() + "个贡献。");
-
-                            double count = (double) adTyperBucket.getDocCount();
-                            //计算样式系数
-                            double styleFactor = settlementUtils.getStylefactor(adTyperBucket.getKey().toString());
-                            double completeness = settlementUtils.getCompleteness(sendDate, flowMainBucket.getKeyAsString(), adTyperBucket.getKeyAsString());
-
-                            System.out.println("样式系数：" + styleFactor);
-                            System.out.println("完备程度：" + completeness);
-
-                            double aa = count * styleFactor * completeness * 0.8;
-                            System.out.println(adTyperBucket.getKey().toString() + "贡献值" + aa);
-                            zh += aa;
-                        }
-
-                        double flexibility = settlementUtils.getFlexibility(flowMainBucket.getKey().toString(), sendDate);
-                        System.out.println("灵活程度：" + flexibility);
-                        double gx = zh * flexibility * 1;
-                        Map map = new HashMap();
-                        map.put("flowMain", ad.getFlowMain());
-                        map.put("nodeId", ad.getNodeId());
-                        map.put("gx", gx);
-                        map.put("flowMainAddress", ad.getFlowMainAddress());
-                        map.put("allianceAddress", ad.getAllianceAddress());
-                        ls.add(map);
-                        alls += gx;
+                        double aa = count * styleFactor * completeness * 0.8;
+                        System.out.println(adTyperBucket.getKey().toString() + "贡献值" + aa);
+                        zh += aa;
                     }
 
+                    double flexibility = settlementUtils.getFlexibility(flowMainBucket.getKey().toString(), sendDate);
+                    System.out.println("灵活程度：" + flexibility);
+                    double gx = zh * flexibility * 1;
+                    Map map = new HashMap();
+                    map.put("flowMain", ad.getFlowMain());
+                    map.put("nodeId", ad.getNodeId());
+                    map.put("gx", gx);
+                    map.put("flowMainAddress", ad.getFlowMainAddress());
+                    map.put("allianceAddress", ad.getAllianceAddress());
+                    ls.add(map);
+                    alls += gx;
                 }
+
 
                 logger.info("今天发币量  : " + df.format(nowcoin));
                 for (Map map : ls) {
@@ -178,9 +153,9 @@ public class SettlementCenter {
 
                         if (null != allianceAddress) {
                             //异常结算到节点地址
-                            fabricService.abnormal(allianceAddress.toString(), df.format(flowMainADF));
+                            stateService.abnormal(allianceAddress.toString(), df.format(flowMainADF));
                             //节点正常提成
-                            fabricService.commission(allianceAddress.toString(), df.format(allianceADF));
+                            stateService.commission(allianceAddress.toString(), df.format(allianceADF));
                             logger.info("流量主获得： " + df.format(flowMainADF - allianceADF) + " 个ADF");
                             logger.info("存入钱包地址：" + flowMainAddress);
 
@@ -198,9 +173,9 @@ public class SettlementCenter {
                     } else {
                         double flowMainADF = nowcoin * v;
                         double allianceADF = flowMainADF * noderatio;
-                        fabricService.settlement(flowMainAddress.toString(), df.format(flowMainADF), hash);
+                        stateService.settlement(flowMainAddress.toString(), df.format(flowMainADF), hash);
 
-                        fabricService.commission(allianceAddress.toString(), df.format(allianceADF));
+                        stateService.commission(allianceAddress.toString(), df.format(allianceADF));
 
                         Settlement settlement = new Settlement();
                         settlement.setFlowMain(flowMain);
